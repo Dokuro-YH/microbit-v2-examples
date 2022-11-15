@@ -5,6 +5,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+calibration = []
+
 [dependencies]
 
 panic-halt = "0.2.0"
@@ -15,6 +19,8 @@ cortex-m = "0.7.6"
 cortex-m-rt = "0.7.2"
 embedded-hal = "0.2.7"
 microbit-v2 = "0.13.0"
+lsm303agr = "0.2.2"
+libm = "0.2.6"
 
 nb = "1.0"
 heapless = "0.7.16"
