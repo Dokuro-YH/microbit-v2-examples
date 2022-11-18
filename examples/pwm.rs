@@ -11,35 +11,6 @@ use microbit::hal::pwm::{Channel, CounterMode, Prescaler, Pwm, Seq};
 use microbit::hal::timer::Timer;
 use microbit::Board;
 
-// const DO0: u32 = 262;
-// const RE0: u32 = 294;
-// const MI0: u32 = 330;
-// const FA0: u32 = 349;
-// const SOL0: u32 = 392;
-// const LA0: u32 = 440;
-// const SI0: u32 = 494;
-// const DO: u32 = 523;
-// const RE: u32 = 587;
-// const MI: u32 = 659;
-// const FA: u32 = 698;
-// const SOL: u32 = 784;
-// const LA: u32 = 880;
-// const SI: u32 = 988;
-// const DO2: u32 = 1047;
-// const RE2: u32 = 1177;
-// const STOP: u32 = 36000;
-
-// const music: [(u32, u32); 8] = [
-//     (DO, 8),
-//     (RE, 8),
-//     (MI, 8),
-//     (FA, 8),
-//     (SOL, 8),
-//     (LA, 8),
-//     (SI, 8),
-//     (DO2, 8),
-// ];
-
 #[entry]
 fn main() -> ! {
     rtt_target::rtt_init_print!();
@@ -56,23 +27,29 @@ fn main() -> ! {
         .set_counter_mode(CounterMode::UpAndDown)
         .set_seq_refresh(Seq::Seq0, 0)
         .set_seq_end_delay(Seq::Seq0, 0)
-        .set_prescaler(Prescaler::Div1)
-        .set_period(20.hz())
-        .set_max_duty(10)
+        .set_prescaler(Prescaler::Div16)
+        .set_period(1.hz())
+        .set_max_duty(u16::MAX)
         .enable();
+
+    // duty = 音量
+    // freq = 音调
 
     let mut timer = Timer::new(board.TIMER0);
 
-    pwm.set_duty_on_common(5);
+    let mut max_duty = pwm.max_duty();
+    let mut duty = pwm.max_duty() / 7;
+    pwm.set_duty_on_common(duty);
+
     loop {
-        // for (note, th) in music {
-        //     pwm.set_duty_on_common(note * 100);
-        //     timer.delay_ms(th * 100_u32);
-        // }
-        for i in 0..1000 {
-            rprintln!("{}hz", i);
+        for i in music::music_1 {
+            rprintln!("max_duty {} duty {} {}hz ", max_duty, duty, i);
             pwm.set_period(i.hz());
-            pwm.set_duty_on_common(5);
+            timer.delay_ms(3000_u32);
+
+            max_duty = pwm.max_duty();
+            duty = max_duty / 2;
+            pwm.set_duty_on_common(duty);
             timer.delay_ms(100_u32);
         }
 
@@ -80,4 +57,32 @@ fn main() -> ! {
         rprintln!("Restart!");
         timer.delay_ms(3000_u32);
     }
+}
+
+mod music {
+    pub const D_DO: u32 = 262;
+    pub const D_RE: u32 = 294;
+    pub const D_MI: u32 = 330;
+    pub const D_FA: u32 = 349;
+    pub const D_SO: u32 = 392;
+    pub const D_LA: u32 = 440;
+    pub const D_SI: u32 = 494;
+
+    pub const M_DO: u32 = 523;
+    pub const M_RE: u32 = 587;
+    pub const M_MI: u32 = 659;
+    pub const M_FA: u32 = 698;
+    pub const M_SO: u32 = 784;
+    pub const M_LA: u32 = 880;
+    pub const M_SI: u32 = 988;
+
+    pub const H_DO: u32 = 1046;
+    pub const H_RE: u32 = 1157;
+    pub const H_MI: u32 = 1318;
+    pub const H_FA: u32 = 1397;
+    pub const H_SO: u32 = 1568;
+    pub const H_LA: u32 = 1760;
+    pub const H_SI: u32 = 1976;
+
+    pub const music_1: [u32; 7] = [M_DO, M_RE, M_MI, M_FA, M_SO, M_LA, M_SI];
 }
