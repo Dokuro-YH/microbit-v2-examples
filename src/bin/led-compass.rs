@@ -1,10 +1,7 @@
 #![no_std]
 #![no_main]
 
-#[path = "../src/calibration.rs"]
-mod calibration;
-#[path = "../src/led.rs"]
-mod led;
+use microbit_v2_examples as _;
 
 use core::f32::consts::PI;
 
@@ -15,13 +12,12 @@ use microbit::display::blocking::Display;
 use microbit::hal::twim::Twim;
 use microbit::hal::Timer;
 use microbit::pac::twim0::frequency::FREQUENCY_A;
-use panic_halt as _;
 
-use crate::calibration::calibrated_measurement;
-use crate::led::{direction_to_led, Direction};
+use microbit_v2_examples::calibration::calibrated_measurement;
+use microbit_v2_examples::led::{direction_to_led, Direction};
 
 #[cfg(feature = "default")]
-use crate::calibration::Calibration;
+use microbit_v2_examples::calibration::Calibration;
 
 #[cfg(feature = "calibration")]
 #[path = "../src/serial_setup.rs"]

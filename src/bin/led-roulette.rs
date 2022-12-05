@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use panic_rtt_target as _;
+use microbit_v2_examples as _;
 
 use microbit::board::Board;
 use microbit::display::blocking::Display;
@@ -28,7 +28,6 @@ const ROULETTE_PIXELS: [(usize, usize); 16] = [
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    rtt_target::rtt_init_print!();
     let board = Board::take().unwrap();
 
     let mut timer = Timer::new(board.TIMER0);

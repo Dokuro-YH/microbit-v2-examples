@@ -1,7 +1,7 @@
 #![no_main]
 #![no_std]
 
-use panic_halt as _;
+use microbit_v2_examples as _;
 
 use microbit::hal::gpio::Level;
 use microbit::hal::prelude::*;
@@ -28,8 +28,6 @@ pub const XIAO_XING_XING: [usize; 32] = [
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    rtt_target::rtt_init_print!();
-
     let board = Board::take().unwrap();
 
     let mut pin = board.speaker_pin.into_push_pull_output(Level::High);

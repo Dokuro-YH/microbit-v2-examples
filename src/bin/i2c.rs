@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+use microbit_v2_examples as _;
+
 use core::fmt::Write;
 use core::str;
 use heapless::Vec;
@@ -10,16 +12,11 @@ use microbit::hal::prelude::*;
 use microbit::hal::twim::Twim;
 use microbit::hal::uarte::{Baudrate, Parity, Uarte};
 use microbit::Board;
-use panic_rtt_target as _;
 
-#[path = "../src/serial_setup.rs"]
-mod serial_setup;
-use serial_setup::UartePort;
+use microbit_v2_examples::serial_setup::UartePort;
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    rtt_target::rtt_init_print!();
-
     let board = Board::take().unwrap();
 
     // init uarte port
