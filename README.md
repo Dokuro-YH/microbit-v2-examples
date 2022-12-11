@@ -15,8 +15,8 @@ Make sure you have the latest versions (`cargo install <tool>`) of these tools:
 
 ## Usage
 
-### run application
+### run examples
 
 ```
-cargo rb echo
+cargo run --example echo
 ```

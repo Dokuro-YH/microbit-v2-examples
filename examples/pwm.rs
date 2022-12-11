@@ -38,10 +38,6 @@ fn main() -> ! {
     let pwm = Pwm::new(board.PWM0);
     pwm.set_output_pin(Channel::C0, pin.degrade())
         .set_counter_mode(CounterMode::UpAndDown)
-        .set_seq_refresh(Seq::Seq0, 0)
-        .set_seq_end_delay(Seq::Seq0, 0)
-        .set_period(1.hz())
-        .set_max_duty(100)
         .enable();
 
     let mut timer = Timer::new(board.TIMER0);
