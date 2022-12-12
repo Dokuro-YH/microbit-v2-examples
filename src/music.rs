@@ -1,4 +1,6 @@
-use cortex_m::prelude::_embedded_hal_blocking_delay_DelayMs;
+use core::ops::RangeBounds;
+
+use embedded_hal::blocking::delay::DelayMs;
 use microbit::hal::{pwm, time::U32Ext, timer};
 
 /// A-B, C-G
@@ -80,74 +82,85 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
         }
 
         let note_len = note_str.len();
-
-        // parse the pitch and octave
         if note_len >= 2 {
-            if let (Some(mut period_index), Some(mut octave)) = (
-                read_pitch(note_str[note_len - 2]),
-                read_octave(note_str[note_len - 1]),
-            ) {
-                // parse the sharp or flat
-                let mut sharp = false;
-                if let Some(c) = read_sharp_or_flat(note_str[0]) {
-                    if c == b'b' {
-                        // make sure we handle wrapping round gracefully
-                        if period_index == 0 {
-                            period_index = 6;
-                        } else {
-                            period_index -= 1;
-                        }
+            // parse the octave
+            let mut octave = 4;
+            if let Some(s) = read_char_if(note_str, b'0'..=b'9', true) {
+                note_str = s.0;
+                octave = (s.1 & 0xf) as i32;
+            }
 
-                        // handle the unusual edge case of Cb
-                        if period_index == 1 {
-                            octave -= 1;
-                        }
+            // parse the note
+            let mut period_index = 3;
+            if let Some(s) = read_char_if(note_str, b'a'..=b'g', true) {
+                note_str = s.0;
+                period_index = (s.1 & 0xf) as usize - 1;
+            }
+
+            // parse the sharp or flat
+            let mut sharp = false;
+            if let Some((_, c)) = read_sharp_or_flat(note_str, false) {
+                if c == b'#' {
+                } else if c == b'b' {
+                    if period_index == 0 {
+                        period_index = 6;
+                    } else {
+                        period_index -= 1;
                     }
 
-                    sharp = true;
+                    if period_index == 1 {
+                        octave -= 1;
+                    }
                 }
 
-                // make the octave relative to octave 4
-                octave -= 4;
+                sharp = true;
+            }
 
-                if period_index < 10 {
-                    let periods = if sharp { PERIODS_SHARP } else { PERIODS };
-                    let period = if octave > 0 {
-                        periods[period_index] >> octave
-                    } else {
-                        periods[period_index] << -octave
-                    };
-                    self.buzzer.set_period(period.hz()).enable();
+            // make the octave relative to octave 4
+            octave -= 4;
+
+            if period_index < 10 {
+                let periods = if sharp { PERIODS_SHARP } else { PERIODS };
+                let period = if octave > 0 {
+                    periods[period_index] >> octave
                 } else {
-                    self.buzzer.disable();
-                }
+                    periods[period_index] << -octave
+                };
+                defmt::info!("{}: {}", note, period);
+                self.buzzer.set_period(period.hz()).enable();
+            } else {
+                self.buzzer.disable();
             }
         }
-        (60000 / self.bpm as u32) * duration
-    }
-}
-
-/// parse pitch, we'll represent the pitch as an integer (A=0, G=6)
-fn read_pitch(c: u8) -> Option<usize> {
-    match c {
-        c @ (b'a'..=b'g' | b'A'..=b'G') => Some((c & 0xf) as usize - 1),
-        _ => None,
-    }
-}
-
-/// parse the octave
-fn read_octave(c: u8) -> Option<i32> {
-    match c {
-        c @ b'0'..=b'9' => Some((c & 0xf) as i32),
-        _ => None,
+        let delay_ms = (60000 / self.bpm as u32) * duration;
+        defmt::info!("delay {}ms", delay_ms);
+        delay_ms
     }
 }
 
 /// parse sharp or flat
-fn read_sharp_or_flat(c: u8) -> Option<u8> {
-    match c {
-        b'#' | b'b' => Some(c),
-        _ => None,
+fn read_sharp_or_flat(src: &[u8], revease: bool) -> Option<(&[u8], u8)> {
+    read_char(src, b'#', revease).or_else(|| read_char(src, b'b', revease))
+}
+
+/// parse one char
+fn read_char_if<R: RangeBounds<u8>>(src: &[u8], range: R, revease: bool) -> Option<(&[u8], u8)> {
+    let src_len = src.len();
+    if src_len == 0 {
+        return None;
+    };
+
+    let (dest, idx) = if revease {
+        (&src[..src_len - 1], src_len - 1)
+    } else {
+        (&src[1..], 0)
+    };
+
+    let s = src[idx];
+    if range.contains(&s) {
+        Some((dest, s))
+    } else {
+        None
     }
 }
 
