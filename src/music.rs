@@ -9,7 +9,7 @@ const PERIODS: &[u32] = &[440, 494, 262, 294, 330, 349, 392];
 const PERIODS_SHARP: &[u32] = &[466, 0, 277, 311, 0, 370, 415];
 
 pub struct Music<PWM: pwm::Instance, TIM: timer::Instance> {
-    bpm: u8,
+    bpm: u32,
     buzzer: pwm::Pwm<PWM>,
     timer: timer::Timer<TIM>,
 }
@@ -23,13 +23,13 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
         }
     }
 
-    pub fn bpm(&self) -> u8 {
+    pub fn bpm(&self) -> u32 {
         self.bpm
     }
 
-    /// Set music play note BPM (60 - 240)
-    pub fn set_bpm(&mut self, bpm: u8) -> &mut Self {
-        self.bpm = bpm.max(60).min(240);
+    /// Set music play note BPM
+    pub fn set_bpm(&mut self, bpm: u32) -> &mut Self {
+        self.bpm = bpm;
         self
     }
 
@@ -59,6 +59,7 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
 
     /// play note and return the duration(ms)
     pub fn play_note(&mut self, mut note: &str) -> u32 {
+        self.buzzer.disable();
         // parse the duration
         let mut duration = 1;
         if let Some((prefix, suffix)) = note.split_once(':') {
@@ -72,10 +73,10 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
         let mut note_str = note.as_bytes();
         // parse the bpm*2 symbol is: (
         while let Some(s) = read_char(note_str, b'(', false) {
-            self.bpm /= 2;
+            self.bpm *= 2;
             note_str = s.0;
         }
-        // parse the bpm*2 symbol is: )
+        // parse the bpm/2 symbol is: )
         while let Some(s) = read_char(note_str, b')', true) {
             self.bpm /= 2;
             note_str = s.0;
@@ -119,20 +120,18 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
             // make the octave relative to octave 4
             octave -= 4;
 
-            if period_index < 10 {
-                let periods = if sharp { PERIODS_SHARP } else { PERIODS };
-                let period = if octave > 0 {
-                    periods[period_index] >> octave
-                } else {
-                    periods[period_index] << -octave
-                };
-                defmt::info!("{}: {}", note, period);
-                self.buzzer.set_period(period.hz()).enable();
+            let periods = if sharp { PERIODS_SHARP } else { PERIODS };
+            let period = if octave > 0 {
+                periods[period_index] >> octave
             } else {
-                self.buzzer.disable();
-            }
+                periods[period_index] << -octave
+            };
+            defmt::info!("{}: {}", note, period);
+            self.buzzer.set_period(period.hz());
+            self.buzzer.set_duty_on_common(self.buzzer.max_duty() / 2);
+            self.buzzer.enable();
         }
-        let delay_ms = (60000 / self.bpm as u32) * duration;
+        let delay_ms = (60000 / self.bpm) * duration;
         defmt::info!("delay {}ms", delay_ms);
         delay_ms
     }

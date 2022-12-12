@@ -22,3 +22,5 @@ target = "thumbv7em-none-eabihf"     # Cortex-M4F and Cortex-M7F (with FPU)
 [alias]
 rb = "run --bin"
 rrb = "run --release --bin"
+eb = "embed --bin"
+erb = "embed --release --bin"

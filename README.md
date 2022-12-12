@@ -12,11 +12,18 @@ Make sure you have the latest versions (`cargo install <tool>`) of these tools:
 
 * `flip-link`
 * `probe-run`
+* `cargo-embed`
 
 ## Usage
 
-### run examples
+### run application
 
 ```
-cargo run --example echo
+cargo rb led-roulette
+```
+
+### flush application
+
+```
+cargo embed --bin led-roulette
 ```

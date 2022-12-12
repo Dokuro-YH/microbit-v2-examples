@@ -43,6 +43,7 @@ fn main() -> ! {
     let duration_ms = 100_u32;
     let mut last_led = (0, 0);
     loop {
+        defmt::info!("start");
         for current_led in ROULETTE_PIXELS.iter() {
             led_display[last_led.0][last_led.1] = 0;
             led_display[current_led.0][current_led.1] = 1;
