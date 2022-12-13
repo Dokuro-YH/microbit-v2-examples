@@ -5,7 +5,7 @@ use microbit_v2_examples as _;
 
 use microbit::hal::gpio::Level;
 use microbit::hal::prelude::*;
-use microbit::hal::pwm::{Channel, CounterMode, Pwm, Seq};
+use microbit::hal::pwm::{Channel, CounterMode, Pwm};
 use microbit::hal::timer::Timer;
 use microbit::Board;
 
