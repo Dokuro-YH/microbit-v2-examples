@@ -23,8 +23,3 @@ lsm303agr = "0.2.2"
 libm = "0.2.6"
 nb = "1.0.0"
 heapless = "0.7.16"
-
-[lib]
-harness = false
-test = false
-bench = false
