@@ -1,7 +1,12 @@
 use core::ops::RangeBounds;
 
 use embedded_hal::blocking::delay::DelayMs;
-use microbit::hal::{pwm, time::U32Ext, timer};
+use microbit::hal::{
+    gpio::{Output, Pin, PushPull},
+    pwm::{self, Channel, CounterMode, Pwm},
+    time::U32Ext,
+    timer::{self, Timer},
+};
 
 /// A-B, C-G
 const PERIODS: &[u32] = &[440, 494, 262, 294, 330, 349, 392];
@@ -15,7 +20,11 @@ pub struct Music<PWM: pwm::Instance, TIM: timer::Instance> {
 }
 
 impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
-    pub fn new(buzzer: pwm::Pwm<PWM>, timer: timer::Timer<TIM>) -> Self {
+    pub fn new(pin: Pin<Output<PushPull>>, pwm: PWM, timer: TIM) -> Self {
+        let buzzer = Pwm::new(pwm);
+        let timer = Timer::new(timer);
+        buzzer.set_output_pin(Channel::C0, pin);
+        buzzer.set_counter_mode(CounterMode::UpAndDown);
         Music {
             bpm: 120, // one note with 500ms
             buzzer,
@@ -35,16 +44,14 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
 
     /// Play notes split with whitespace.
     ///
-    /// Note: (pitch)(octave)(#|b)(:duration)
+    /// Note: (#|b)(pitch)(octave)(:duration)
     ///
     /// pitch: A-G/a-g
     /// octave: 0-9
     /// duration: 1-10
     ///
     /// Example
-    /// ```rust
-    /// # use microbit_v2_examples::music::Music;
-    /// # let mut music = Music::default();
+    /// ```no_run
     /// music.play(r#"c4 c4 g4 g4 a4 a4 g4 -
     ///               f4 f4 e4 e4 d4 d4 c4 -
     ///               g4 g4 f4 f4 e4 e4 d4 -
@@ -82,58 +89,58 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
             note_str = s.0;
         }
 
-        let note_len = note_str.len();
-        if note_len >= 2 {
-            // parse the octave
-            let mut octave = 4;
-            if let Some(s) = read_char_if(note_str, b'0'..=b'9', true) {
-                note_str = s.0;
-                octave = (s.1 & 0xf) as i32;
-            }
-
-            // parse the note
-            let mut period_index = 3;
-            if let Some(s) = read_char_if(note_str, b'a'..=b'g', true) {
-                note_str = s.0;
-                period_index = (s.1 & 0xf) as usize - 1;
-            }
-
-            // parse the sharp or flat
-            let mut sharp = false;
-            if let Some((_, c)) = read_sharp_or_flat(note_str, false) {
-                if c == b'#' {
-                } else if c == b'b' {
-                    if period_index == 0 {
-                        period_index = 6;
-                    } else {
-                        period_index -= 1;
-                    }
-
-                    if period_index == 1 {
-                        octave -= 1;
-                    }
-                }
-
-                sharp = true;
-            }
-
-            // make the octave relative to octave 4
-            octave -= 4;
-
-            let periods = if sharp { PERIODS_SHARP } else { PERIODS };
-            let period = if octave > 0 {
-                periods[period_index] >> octave
-            } else {
-                periods[period_index] << -octave
-            };
-            defmt::info!("{}: {}", note, period);
+        let delay_ms = (60000 / self.bpm) * duration;
+        if let Some(period) = self.parse_note(note_str) {
             self.buzzer.set_period(period.hz());
             self.buzzer.set_duty_on_common(self.buzzer.max_duty() / 2);
             self.buzzer.enable();
+            defmt::info!("{}: {}hz {}ms", note, period, delay_ms);
+        } else {
+            defmt::info!("{}: 0hz {}ms", note, delay_ms);
         }
-        let delay_ms = (60000 / self.bpm) * duration;
-        defmt::info!("delay {}ms", delay_ms);
         delay_ms
+    }
+
+    /// parse the note
+    fn parse_note(&mut self, note_str: &[u8]) -> Option<u32> {
+        // parse the octave
+        let (note_str, octave) = read_char_if(note_str, b'0'..=b'9', true)?;
+
+        // parse the period index
+        let (note_str, period_index) = read_char_if(note_str, b'a'..=b'g', true)?;
+
+        // parse the sharp or flat
+        let mut octave = octave as i32;
+        let mut period_index = period_index as usize;
+        let mut sharp = false;
+        if let Some((_, c)) = read_sharp_or_flat(note_str, false) {
+            if c == b'#' {
+            } else if c == b'b' {
+                if period_index == 0 {
+                    period_index = 6;
+                } else {
+                    period_index -= 1;
+                }
+
+                if period_index == 1 {
+                    octave -= 1;
+                }
+            }
+
+            sharp = true;
+        }
+
+        // make the octave relative to octave 4
+        octave -= 4;
+
+        let periods = if sharp { PERIODS_SHARP } else { PERIODS };
+        let period = if octave > 0 {
+            periods[period_index] >> octave
+        } else {
+            periods[period_index] << -octave
+        };
+
+        Some(period)
     }
 }
 
