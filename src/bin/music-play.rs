@@ -1,28 +1,64 @@
 #![no_main]
 #![no_std]
 
-use microbit::hal::gpio::Level;
-use microbit::hal::prelude::*;
-use microbit::hal::timer::Timer;
-use microbit::Board;
+use microbit::{hal::gpio::Level, pac, Board};
 
-use microbit_v2_examples::{self as _, music::Music};
+use microbit_v2_examples::{
+    self as _,
+    monotonic::{ExtU32, MonoTimer},
+    music::Music,
+};
 
-#[cortex_m_rt::entry]
-fn main() -> ! {
-    let board = Board::take().unwrap();
+#[rtic::app(device = microbit::pac, dispatchers = [RTC0, RTC1, RTC2])]
+mod app {
+    use super::*;
 
-    let pin = board.speaker_pin.into_push_pull_output(Level::High);
-    let mut music = Music::new(pin.degrade(), board.PWM0, board.TIMER0);
-    let mut timer = Timer::new(board.TIMER1);
-    defmt::info!("start loop play music");
-    loop {
-        music.play(
-            r#"c4 c4 g4 g4 a4 a4 g4 -
-               f4 f4 e4 e4 d4 d4 c4 -
-               g4 g4 f4 f4 e4 e4 d4 -
-               g4 g4 f4 f4 e4 e4 d4 -"#,
+    #[monotonic(binds = TIMER0, default = true)]
+    type Tnoic = MonoTimer<microbit::pac::TIMER0>;
+
+    #[shared]
+    struct Shared {
+        music: Music<pac::PWM0, pac::TIMER1>,
+        tones: &'static str,
+    }
+
+    #[local]
+    struct Local {}
+
+    const XIAO_XING_XING: &str = r#"
+    c4 c4 g4 g4 a4 a4 g4 -
+    f4 f4 e4 e4 d4 d4 c4 -
+    g4 g4 f4 f4 e4 e4 d4 -
+    g4 g4 f4 f4 e4 e4 d4 -
+    "#;
+
+    #[init]
+    fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
+        let board = Board::new(cx.device, cx.core);
+        let mono = MonoTimer::new(board.TIMER0);
+
+        let music = Music::new(
+            board
+                .speaker_pin
+                .into_push_pull_output(Level::High)
+                .degrade(),
+            board.PWM0,
+            board.TIMER1,
         );
-        timer.delay_ms(1000_u32);
+        let tones = XIAO_XING_XING;
+
+        (Shared { music, tones }, Local {}, init::Monotonics(mono))
+    }
+
+    #[task(shared = [music, &tones])]
+    fn play_music(mut cx: play_music::Context) {
+        cx.shared.music.lock(|music| music.play(&cx.shared.tones));
+    }
+
+    #[idle]
+    fn idle(_: idle::Context) -> ! {
+        loop {
+            let _ = play_music::spawn_after(1.secs());
+        }
     }
 }

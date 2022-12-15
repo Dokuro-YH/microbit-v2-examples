@@ -12,6 +12,7 @@ calibration = []
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7"
+cortex-m-rtic = "1.1.3"
 embedded-hal = "0.2.7"
 microbit-v2 = "0.13.0"
 
@@ -23,3 +24,5 @@ lsm303agr = "0.2.2"
 libm = "0.2.6"
 nb = "1.0.0"
 heapless = "0.7.16"
+fugit = { version = "0.3.6", features = ["defmt"] }
+rtic-monotonic = "1.0.0"
