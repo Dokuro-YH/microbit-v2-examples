@@ -21,19 +21,17 @@ use microbit_v2_examples::{
 use microbit_v2_examples::calibration::Calibration;
 
 #[cfg(feature = "calibration")]
-use core::fmt::Write;
-#[cfg(feature = "calibration")]
-use microbit::{
-    hal::uarte::{Baudrate, Parity},
-    hal::Uarte,
+use {
+    core::fmt::Write,
+    microbit::{
+        hal::uarte::{Baudrate, Parity},
+        hal::Uarte,
+    },
+    microbit_v2_examples::{calibration::calc_calibration, serial_setup::UartePort},
 };
-#[cfg(feature = "calibration")]
-use microbit_v2_examples::{calibration::calc_calibration, serial_setup::UartePort};
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    // rtt_init_print!();
-
     let board = Board::take().unwrap();
     #[cfg(feature = "calibration")]
     let mut serial = {

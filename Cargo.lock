@@ -334,6 +334,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "microbit-text"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "029db169f7b5f0253f2b348a1f580ed532f7df769fc88ca9e1871ca92ec04c40"
+dependencies = [
+ "tiny-led-matrix",
+]
+
+[[package]]
 name = "microbit-v2"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -356,6 +365,7 @@ dependencies = [
  "heapless",
  "libm",
  "lsm303agr",
+ "microbit-text",
  "microbit-v2",
  "nb 1.0.0",
  "panic-probe",

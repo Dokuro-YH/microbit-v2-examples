@@ -26,3 +26,4 @@ nb = "1.0.0"
 heapless = "0.7.16"
 fugit = { version = "0.3.6", features = ["defmt"] }
 rtic-monotonic = "1.0.0"
+microbit-text = "1.0.0"

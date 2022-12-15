@@ -18,12 +18,13 @@ mod app {
 
     #[shared]
     struct Shared {
-        music: Music<pac::PWM0, pac::TIMER1>,
         tones: &'static str,
     }
 
     #[local]
-    struct Local {}
+    struct Local {
+        music: Music<pac::PWM0, pac::TIMER1>,
+    }
 
     const XIAO_XING_XING: &str = r#"
     c4 c4 g4 g4 a4 a4 g4 -
@@ -47,12 +48,12 @@ mod app {
         );
         let tones = XIAO_XING_XING;
 
-        (Shared { music, tones }, Local {}, init::Monotonics(mono))
+        (Shared { tones }, Local { music }, init::Monotonics(mono))
     }
 
-    #[task(shared = [music, &tones])]
-    fn play_music(mut cx: play_music::Context) {
-        cx.shared.music.lock(|music| music.play(&cx.shared.tones));
+    #[task(local = [music], shared = [&tones])]
+    fn play_music(cx: play_music::Context) {
+        cx.local.music.play(&cx.shared.tones);
     }
 
     #[idle]
