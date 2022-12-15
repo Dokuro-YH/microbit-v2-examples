@@ -1,12 +1,12 @@
 #![no_main]
 #![no_std]
 
-use microbit_v2_examples::{self as _, music::Music};
-
 use microbit::hal::gpio::Level;
 use microbit::hal::prelude::*;
 use microbit::hal::timer::Timer;
 use microbit::Board;
+
+use microbit_v2_examples::{self as _, music::Music};
 
 #[cortex_m_rt::entry]
 fn main() -> ! {

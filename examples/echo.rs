@@ -1,14 +1,13 @@
 #![no_std]
 #![no_main]
 
-use microbit_v2_examples as _;
-use microbit_v2_examples::serial_setup::UartePort;
-
 use core::fmt::Write;
 use heapless::String;
 use microbit::hal::prelude::*;
 use microbit::hal::uarte::{self, Baudrate, Parity};
 use microbit::Board;
+
+use microbit_v2_examples::{self as _, serial_setup::UartePort};
 
 #[cortex_m_rt::entry]
 fn main() -> ! {

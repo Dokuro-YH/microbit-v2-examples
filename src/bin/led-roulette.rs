@@ -1,30 +1,11 @@
 #![no_std]
 #![no_main]
 
-use microbit_v2_examples as _;
-
 use microbit::board::Board;
 use microbit::display::blocking::Display;
 use microbit::hal::timer::Timer;
 
-const ROULETTE_PIXELS: [(usize, usize); 16] = [
-    (0, 0),
-    (0, 1),
-    (0, 2),
-    (0, 3),
-    (0, 4),
-    (1, 4),
-    (2, 4),
-    (3, 4),
-    (4, 4),
-    (4, 3),
-    (4, 2),
-    (4, 1),
-    (4, 0),
-    (3, 0),
-    (2, 0),
-    (1, 0),
-];
+use microbit_v2_examples as _;
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
@@ -52,3 +33,22 @@ fn main() -> ! {
         }
     }
 }
+
+const ROULETTE_PIXELS: [(usize, usize); 16] = [
+    (0, 0),
+    (0, 1),
+    (0, 2),
+    (0, 3),
+    (0, 4),
+    (1, 4),
+    (2, 4),
+    (3, 4),
+    (4, 4),
+    (4, 3),
+    (4, 2),
+    (4, 1),
+    (4, 0),
+    (3, 0),
+    (2, 0),
+    (1, 0),
+];

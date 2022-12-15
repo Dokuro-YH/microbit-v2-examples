@@ -20,6 +20,7 @@ pub struct Music<PWM: pwm::Instance, TIM: timer::Instance> {
 }
 
 impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
+
     pub fn new(pin: Pin<Output<PushPull>>, pwm: PWM, timer: TIM) -> Self {
         let buzzer = Pwm::new(pwm);
         let timer = Timer::new(timer);
@@ -83,16 +84,17 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
             self.bpm *= 2;
             note_str = s.0;
         }
+        let delay_ms = (60000 / self.bpm) * duration;
         // parse the bpm/2 symbol is: )
         while let Some(s) = read_char(note_str, b')', true) {
             self.bpm /= 2;
             note_str = s.0;
         }
 
-        let delay_ms = (60000 / self.bpm) * duration;
         if let Some(period) = self.parse_note(note_str) {
             self.buzzer.set_period(period.hz());
-            self.buzzer.set_duty_on_common(self.buzzer.max_duty() / 2);
+            self.buzzer
+                .set_duty_on(Channel::C0, self.buzzer.max_duty() / 2);
             self.buzzer.enable();
             defmt::info!("{}: {}hz {}ms", note, period, delay_ms);
         } else {
@@ -107,11 +109,11 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
         let (note_str, octave) = read_char_if(note_str, b'0'..=b'9', true)?;
 
         // parse the period index
-        let (note_str, period_index) = read_char_if(note_str, b'a'..=b'g', true)?;
+        let (note_str, pitch) = read_char_if(note_str, b'a'..=b'g', true)?;
 
         // parse the sharp or flat
-        let mut octave = octave as i32;
-        let mut period_index = period_index as usize;
+        let mut octave = (octave & 0xf) as i32;
+        let mut period_index = (pitch & 0x1f >> 1) as usize;
         let mut sharp = false;
         if let Some((_, c)) = read_sharp_or_flat(note_str, false) {
             if c == b'#' {
@@ -135,9 +137,9 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
 
         let periods = if sharp { PERIODS_SHARP } else { PERIODS };
         let period = if octave > 0 {
-            periods[period_index] >> octave
+            periods[period_index] << octave
         } else {
-            periods[period_index] << -octave
+            periods[period_index] >> -octave
         };
 
         Some(period)
