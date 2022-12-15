@@ -1,6 +1,5 @@
 use core::ops::RangeBounds;
 
-use embedded_hal::blocking::delay::DelayMs;
 use microbit::hal::{
     gpio::{Output, Pin, PushPull},
     pwm::{self, Channel, CounterMode, Pwm},
@@ -14,32 +13,44 @@ const PERIODS: &[u32] = &[440, 494, 262, 294, 330, 349, 392];
 const PERIODS_SHARP: &[u32] = &[466, 0, 277, 311, 0, 370, 415];
 
 pub struct Music<PWM: pwm::Instance, TIM: timer::Instance> {
+    notes: &'static [u8],
+    volume: u32,
     bpm: u32,
     buzzer: pwm::Pwm<PWM>,
     timer: timer::Timer<TIM>,
 }
 
 impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
-
     pub fn new(pin: Pin<Output<PushPull>>, pwm: PWM, timer: TIM) -> Self {
         let buzzer = Pwm::new(pwm);
         let timer = Timer::new(timer);
         buzzer.set_output_pin(Channel::C0, pin);
         buzzer.set_counter_mode(CounterMode::UpAndDown);
         Music {
+            notes: &[],
+            volume: 90,
             bpm: 120, // one note with 500ms
             buzzer,
             timer,
         }
     }
 
-    pub fn bpm(&self) -> u32 {
-        self.bpm
+    pub fn volume(&self) -> &u32 {
+        &self.volume
+    }
+
+    pub fn set_volume(&mut self, volume: u32) -> &mut Self {
+        self.volume = volume.clamp(0, 100);
+        self
+    }
+
+    pub fn bpm(&self) -> &u32 {
+        &self.bpm
     }
 
     /// Set music play note BPM
     pub fn set_bpm(&mut self, bpm: u32) -> &mut Self {
-        self.bpm = bpm;
+        self.bpm = bpm.max(30);
         self
     }
 
@@ -58,64 +69,65 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
     ///               g4 g4 f4 f4 e4 e4 d4 -
     ///               g4 g4 f4 f4 e4 e4 d4 -"#)
     /// ```
-    pub fn play(&mut self, tunes: &str) {
-        for note in tunes.split_ascii_whitespace() {
-            let duration = self.play_note(note);
-            self.timer.delay_ms(duration)
-        }
+    pub fn play(&mut self, notes: &'static str) {
+        self.notes = notes.as_bytes();
+    }
+
+    /// Update the music play state
+    fn handle_play_event(&mut self) {
+        todo!()
     }
 
     /// play note and return the duration(ms)
-    pub fn play_note(&mut self, mut note: &str) -> u32 {
+    fn play_note(&mut self, mut note: &[u8]) -> u32 {
         self.buzzer.disable();
         // parse the duration
-        let mut duration = 1;
-        if let Some((prefix, suffix)) = note.split_once(':') {
-            note = prefix;
+        let duration = 1;
+        // if let Some((prefix, suffix)) = note.split_once(':') {
+        //     note = prefix;
 
-            if let Some(i) = read_int(suffix) {
-                duration = i;
-            }
-        }
+        //     if let Some(i) = read_int(suffix) {
+        //         duration = i;
+        //     }
+        // }
 
-        let mut note_str = note.as_bytes();
         // parse the bpm*2 symbol is: (
-        while let Some(s) = read_char(note_str, b'(', false) {
+        while let Some(s) = read_char(note, b'(', false) {
             self.bpm *= 2;
-            note_str = s.0;
+            note = s.0;
         }
         let delay_ms = (60000 / self.bpm) * duration;
         // parse the bpm/2 symbol is: )
-        while let Some(s) = read_char(note_str, b')', true) {
+        while let Some(s) = read_char(note, b')', true) {
             self.bpm /= 2;
-            note_str = s.0;
+            note = s.0;
         }
 
-        if let Some(period) = self.parse_note(note_str) {
+        if let Some(period) = self.parse_note(note) {
             self.buzzer.set_period(period.hz());
-            self.buzzer
-                .set_duty_on(Channel::C0, self.buzzer.max_duty() / 2);
+            let duty = self.buzzer.max_duty() as u32 * self.volume / 200;
+            self.buzzer.set_duty_on_common(duty as u16);
             self.buzzer.enable();
-            defmt::info!("{}: {}hz {}ms", note, period, delay_ms);
+            defmt::info!("volume: {}, {}: {}hz {}ms", self.volume, note, period, delay_ms);
         } else {
-            defmt::info!("{}: 0hz {}ms", note, delay_ms);
+            defmt::info!("volume: {}, {}: 0hz {}ms", self.volume, note, delay_ms);
         }
         delay_ms
     }
 
     /// parse the note
-    fn parse_note(&mut self, note_str: &[u8]) -> Option<u32> {
+    fn parse_note(&mut self, note: &[u8]) -> Option<u32> {
         // parse the octave
-        let (note_str, octave) = read_char_if(note_str, b'0'..=b'9', true)?;
+        let (note, octave) = read_char_if(note, b'0'..=b'9', true)?;
 
         // parse the period index
-        let (note_str, pitch) = read_char_if(note_str, b'a'..=b'g', true)?;
+        let (note, pitch) = read_char_if(note, b'a'..=b'g', true)?;
 
         // parse the sharp or flat
         let mut octave = (octave & 0xf) as i32;
-        let mut period_index = (pitch & 0x1f >> 1) as usize;
+        let mut period_index = ((pitch & 0x1f) - 1) as usize;
         let mut sharp = false;
-        if let Some((_, c)) = read_sharp_or_flat(note_str, false) {
+        if let Some((_, c)) = read_sharp_or_flat(note, false) {
             if c == b'#' {
             } else if c == b'b' {
                 if period_index == 0 {

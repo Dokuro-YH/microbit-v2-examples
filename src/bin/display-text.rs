@@ -80,6 +80,8 @@ mod app {
             shared.display.lock(|display| {
                 display.show_frame(local.frame);
             });
+        } else {
+            local.scroller.reset();
         }
     }
 }
