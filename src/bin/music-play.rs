@@ -3,11 +3,7 @@
 
 use microbit::{hal::gpio::Level, pac, Board};
 
-use microbit_v2_examples::{
-    self as _,
-    monotonic::{ExtU32, MonoTimer},
-    music::Music,
-};
+use microbit_v2_examples::{self as _, monotonic::MonoTimer, music::Music};
 
 #[rtic::app(device = microbit::pac, dispatchers = [RTC0, RTC1, RTC2])]
 mod app {
@@ -57,9 +53,7 @@ mod app {
 
     #[task(binds = TIMER1, shared = [music])]
     fn play(mut cx: play::Context) {
-        cx.shared.music.lock(|music| {
-            music.handle_play_event();
-        });
+        cx.shared.music.lock(|music| music.next_tick());
     }
 
     #[task(binds = GPIOTE, local = [gpiote], shared = [music])]

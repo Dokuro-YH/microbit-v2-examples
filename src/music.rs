@@ -4,35 +4,52 @@ use microbit::hal::{
     gpio::{Output, Pin, PushPull},
     pwm::{self, Channel, CounterMode, Pwm},
     time::U32Ext,
-    timer::{self, Timer},
+    timer::{self},
 };
-
+const DEFAULT_BPM: u32 = 120; // 500ms
 /// A-B, C-G
 const PERIODS: &[u32] = &[440, 494, 262, 294, 330, 349, 392];
 /// A#, -, C#, D#, -, F#, G#
 const PERIODS_SHARP: &[u32] = &[466, 0, 277, 311, 0, 370, 415];
 
-pub struct Music<PWM: pwm::Instance, TIM: timer::Instance> {
+pub struct Music<PWM: pwm::Instance, TIMER: timer::Instance> {
+    pos: usize,
     notes: &'static [u8],
-    volume: u32,
     bpm: u32,
+    volume: u32,
+    timer: TIMER,
     buzzer: pwm::Pwm<PWM>,
-    timer: timer::Timer<TIM>,
 }
 
-impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
-    pub fn new(pin: Pin<Output<PushPull>>, pwm: PWM, timer: TIM) -> Self {
+impl<PWM: pwm::Instance, TIMER: timer::Instance> Music<PWM, TIMER> {
+    pub fn new(pin: Pin<Output<PushPull>>, pwm: PWM, timer: TIMER) -> Self {
         let buzzer = Pwm::new(pwm);
-        let timer = Timer::new(timer);
         buzzer.set_output_pin(Channel::C0, pin);
         buzzer.set_counter_mode(CounterMode::UpAndDown);
-        Music {
+        let mut music = Music {
+            pos: 0,
             notes: &[],
             volume: 90,
-            bpm: 120, // one note with 500ms
+            bpm: DEFAULT_BPM,
             buzzer,
             timer,
-        }
+        };
+        music.initialise();
+        music
+    }
+
+    fn initialise(&mut self) {
+        let timer0 = self.timer.as_timer0();
+        // enable compare interrupt
+        timer0.intenset.write(|w| w.compare0().set());
+        // set frequency to 1Mhz
+        timer0.prescaler.write(|w| unsafe { w.bits(4) });
+        // set as 32 bits
+        timer0.bitmode.write(|w| w.bitmode()._32bit());
+        // enable auto clear
+        timer0.shorts.write(|w| w.compare0_clear().enabled());
+        // reset compare register
+        timer0.events_compare[0].reset();
     }
 
     pub fn volume(&self) -> &u32 {
@@ -44,14 +61,19 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
         self
     }
 
-    pub fn bpm(&self) -> &u32 {
-        &self.bpm
-    }
-
-    /// Set music play note BPM
-    pub fn set_bpm(&mut self, bpm: u32) -> &mut Self {
-        self.bpm = bpm.max(30);
-        self
+    /// Update the music play state
+    pub fn next_tick(&mut self) {
+        let timer0 = self.timer.as_timer0();
+        let reg = &timer0.events_compare[0];
+        let fired = reg.read().bits() != 0;
+        if fired {
+            let note = self.get_next_note();
+            let note_ms = 500; // 500ms
+            let cycles = note_ms * 1000;
+            timer0.cc[0].write(|w| unsafe { w.bits(cycles) });
+            defmt::debug!("play next note: {}", note);
+            reg.reset();
+        }
     }
 
     /// Play notes split with whitespace.
@@ -69,93 +91,155 @@ impl<PWM: pwm::Instance, TIM: timer::Instance> Music<PWM, TIM> {
     ///               g4 g4 f4 f4 e4 e4 d4 -
     ///               g4 g4 f4 f4 e4 e4 d4 -"#)
     /// ```
-    pub fn play(&mut self, notes: &'static str) {
-        self.notes = notes.as_bytes();
+    pub fn play(&mut self, notes: &'static [u8], bpm: u32) {
+        self.reset_timer();
+        self.notes = notes;
+        self.bpm = bpm;
+        self.pos = 0;
+        self.start_timer();
     }
 
-    /// Update the music play state
-    fn handle_play_event(&mut self) {
-        todo!()
+    pub fn stop(&mut self) {
+        self.stop_timer();
     }
 
-    /// play note and return the duration(ms)
-    fn play_note(&mut self, mut note: &[u8]) -> u32 {
-        self.buzzer.disable();
-        // parse the duration
-        let duration = 1;
-        // if let Some((prefix, suffix)) = note.split_once(':') {
-        //     note = prefix;
-
-        //     if let Some(i) = read_int(suffix) {
-        //         duration = i;
-        //     }
-        // }
-
-        // parse the bpm*2 symbol is: (
-        while let Some(s) = read_char(note, b'(', false) {
-            self.bpm *= 2;
-            note = s.0;
-        }
-        let delay_ms = (60000 / self.bpm) * duration;
-        // parse the bpm/2 symbol is: )
-        while let Some(s) = read_char(note, b')', true) {
-            self.bpm /= 2;
-            note = s.0;
-        }
-
-        if let Some(period) = self.parse_note(note) {
-            self.buzzer.set_period(period.hz());
-            let duty = self.buzzer.max_duty() as u32 * self.volume / 200;
-            self.buzzer.set_duty_on_common(duty as u16);
-            self.buzzer.enable();
-            defmt::info!("volume: {}, {}: {}hz {}ms", self.volume, note, period, delay_ms);
-        } else {
-            defmt::info!("volume: {}, {}: 0hz {}ms", self.volume, note, delay_ms);
-        }
-        delay_ms
+    fn reset_timer(&self) {
+        let timer0 = self.timer.as_timer0();
+        // Stop the timer.
+        timer0.tasks_stop.write(|w| unsafe { w.bits(1) });
+        // Clear the counter value.
+        timer0.tasks_clear.write(|w| unsafe { w.bits(1) });
+        // Reset the compare register.
+        timer0.events_compare[0].reset();
     }
 
-    /// parse the note
-    fn parse_note(&mut self, note: &[u8]) -> Option<u32> {
-        // parse the octave
-        let (note, octave) = read_char_if(note, b'0'..=b'9', true)?;
+    fn stop_timer(&self) {
+        let timer0 = self.timer.as_timer0();
+        // Stop the timer.
+        timer0.tasks_stop.write(|w| unsafe { w.bits(1) });
+    }
 
-        // parse the period index
-        let (note, pitch) = read_char_if(note, b'a'..=b'g', true)?;
+    fn start_timer(&self) {
+        let timer0 = self.timer.as_timer0();
+        // Start timer.
+        timer0.tasks_start.write(|w| unsafe { w.bits(1) });
+    }
 
-        // parse the sharp or flat
-        let mut octave = (octave & 0xf) as i32;
-        let mut period_index = ((pitch & 0x1f) - 1) as usize;
-        let mut sharp = false;
-        if let Some((_, c)) = read_sharp_or_flat(note, false) {
-            if c == b'#' {
-            } else if c == b'b' {
-                if period_index == 0 {
-                    period_index = 6;
-                } else {
-                    period_index -= 1;
-                }
-
-                if period_index == 1 {
-                    octave -= 1;
-                }
+    fn get_next_note(&self) -> Option<&[u8]> {
+        let notes_len = self.notes.len();
+        let mut start = 0;
+        let mut end = 0;
+        for pos in self.pos..notes_len {
+            let c = self.notes[pos] as char;
+            if !c.is_ascii_whitespace() {
+                start = pos;
+                break;
             }
-
-            sharp = true;
         }
 
-        // make the octave relative to octave 4
-        octave -= 4;
+        if start == 0 {
+            return None;
+        }
 
-        let periods = if sharp { PERIODS_SHARP } else { PERIODS };
-        let period = if octave > 0 {
-            periods[period_index] << octave
-        } else {
-            periods[period_index] >> -octave
-        };
-
-        Some(period)
+        for pos in start..notes_len {
+            let c = self.notes[pos] as char;
+            if c.is_ascii_whitespace() {
+                end = pos;
+                break;
+            }
+        }
+        if end == 0 {
+            end = notes_len;
+        }
+        Some(&self.notes[start..end])
     }
+
+    // /// play note and return the duration(ms)
+    // fn play_note(&mut self, mut note: &[u8]) -> u32 {
+    //     self.buzzer.disable();
+    //     // parse the duration
+    //     let duration = 1;
+    //     // if let Some((prefix, suffix)) = note.split_once(':') {
+    //     //     note = prefix;
+
+    //     //     if let Some(i) = read_int(suffix) {
+    //     //         duration = i;
+    //     //     }
+    //     // }
+
+    //     // parse the bpm*2 symbol is: (
+    //     while let Some(s) = read_char(note, b'(', false) {
+    //         self.bpm *= 2;
+    //         note = s.0;
+    //     }
+
+    //     let delay_ms = (60000 / self.bpm) * duration;
+
+    //     // parse the bpm/2 symbol is: )
+    //     while let Some(s) = read_char(note, b')', true) {
+    //         self.bpm /= 2;
+    //         note = s.0;
+    //     }
+
+    //     if let Some(period) = self.parse_note(note) {
+    //         self.buzzer.set_period(period.hz());
+    //         let duty = self.buzzer.max_duty() as u32 * self.volume / 200;
+    //         self.buzzer.set_duty_on_common(duty as u16);
+    //         self.buzzer.enable();
+    //         defmt::info!(
+    //             "volume: {}, {}: {}hz {}ms",
+    //             self.volume,
+    //             note,
+    //             period,
+    //             delay_ms
+    //         );
+    //     } else {
+    //         defmt::info!("volume: {}, {}: 0hz {}ms", self.volume, note, delay_ms);
+    //     }
+    //     delay_ms
+    // }
+
+    // /// parse the note
+    // fn parse_note(&mut self, note: &[u8]) -> Option<u32> {
+    //     // parse the octave
+    //     let (note, octave) = read_char_if(note, b'0'..=b'9', true)?;
+
+    //     // parse the pitch
+    //     let (note, pitch) = read_char_if(note, b'a'..=b'g', true)?;
+
+    //     // parse the sharp or flat
+    //     let mut octave = (octave & 0xf) as i32;
+    //     let mut period_index = ((pitch & 0x1f) - 1) as usize;
+    //     let mut sharp = false;
+    //     if let Some((_, c)) = read_sharp_or_flat(note, false) {
+    //         if c == b'#' {
+    //         } else if c == b'b' {
+    //             if period_index == 0 {
+    //                 period_index = 6;
+    //             } else {
+    //                 period_index -= 1;
+    //             }
+
+    //             if period_index == 1 {
+    //                 octave -= 1;
+    //             }
+    //         }
+
+    //         sharp = true;
+    //     }
+
+    //     // make the octave relative to octave 4
+    //     octave -= 4;
+
+    //     let periods = if sharp { PERIODS_SHARP } else { PERIODS };
+    //     let period = if octave > 0 {
+    //         periods[period_index] << octave
+    //     } else {
+    //         periods[period_index] >> -octave
+    //     };
+
+    //     Some(period)
+    // }
 }
 
 /// parse sharp or flat
